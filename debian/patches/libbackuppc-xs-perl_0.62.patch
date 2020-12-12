@@ -1,0 +1,871 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ libbackuppc-xs-perl (0.62-1) unstable; urgency=medium
+ .
+   * Import new upstream release 0.62.
+Author: Raoul Bhatia <raoul@bhatia.eu>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout http://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: <vendor|upstream|other>, <url of original patch>
+Bug: <url in upstream bugtracker>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: <no|not-needed|url proving that it has been forwarded>
+Reviewed-By: <name and email of someone who approved the patch>
+Last-Update: 2020-12-12
+
+--- libbackuppc-xs-perl-0.62.orig/BackupPC_XS.xs
++++ libbackuppc-xs-perl-0.62/BackupPC_XS.xs
+@@ -49,7 +49,7 @@ static HV* convert_file2hv(bpc_attrib_fi
+     (void)hv_store(rh, "type", 4,     newSVuv(file->type), 0);
+     (void)hv_store(rh, "mode", 4,     newSVuv(file->mode), 0);
+     (void)hv_store(rh, "size", 4,     newSVuv(file->size), 0);
+-    (void)hv_store(rh, "mtime", 5,    newSViv(file->mtime), 0);
++    (void)hv_store(rh, "mtime", 5,    newSVuv(file->mtime), 0);
+     (void)hv_store(rh, "inode", 5,    newSVuv(file->inode), 0);
+     (void)hv_store(rh, "nlinks", 6,   newSVuv(file->nlinks), 0);
+     (void)hv_store(rh, "digest", 6,   newSVpvn((char*)file->digest.digest, file->digest.len), 0);
+@@ -90,7 +90,7 @@ static void convert_hv2file(HV *hv, bpc_
+     hv_get_uint(hv, "type", file->type);
+     hv_get_uint(hv, "mode", file->mode);
+     hv_get_uint(hv, "size", file->size);
+-    hv_get_int(hv, "mtime", file->mtime);
++    hv_get_uint(hv, "mtime", file->mtime);
+     hv_get_uint(hv, "inode", file->inode);
+     hv_get_uint(hv, "nlinks", file->nlinks);
+     hv_get_uint(hv, "compress", file->compress);
+@@ -102,25 +102,21 @@ static void convert_hv2file(HV *hv, bpc_
+         file->digest.len = 0;
+     }
+     if ( (svp = hv_fetch(hv, "xattr", 5, 0)) && *svp ) {
+-        if ( SvTYPE(SvRV(*svp)) != SVt_PVHV ) {
+-            bpc_attrib_xattrDeleteAll(file);
+-        } else {
+-            HE *he;
+-            HV *hvXattr = (HV*)SvRV(*svp);
+-            /*
+-             * clear out the old xattrs, and copy in the new
+-             */
+-            bpc_attrib_xattrDeleteAll(file);
+-            hv_iterinit(hvXattr);
+-            while ( (he = hv_iternext(hvXattr)) ) {
+-                I32 keyLen;
+-                STRLEN valueLen;
+-                char *key = hv_iterkey(he, &keyLen), *value;
+-                SV *valSV = hv_iterval(hvXattr, he);
++        HE *he;
++        HV *hvXattr = (HV*)SvRV(*svp);
++        /*
++         * clear out the old xattrs, and copy in the new
++         */
++        bpc_attrib_xattrDeleteAll(file);
++        hv_iterinit(hvXattr);
++        while ( (he = hv_iternext(hvXattr)) ) {
++            I32 keyLen;
++            STRLEN valueLen;
++            char *key = hv_iterkey(he, &keyLen), *value;
++            SV *valSV = hv_iterval(hvXattr, he);
+ 
+-                value = SvPV(valSV, valueLen);
+-                bpc_attrib_xattrSetValue(file, key, keyLen + 1, value, valueLen);
+-            }
++            value = SvPV(valSV, valueLen);
++            bpc_attrib_xattrSetValue(file, key, keyLen, value, valueLen);
+         }
+     }
+ }
+@@ -704,21 +700,6 @@ digest(dir)
+         }
+     }
+ 
+-void
+-iterate(dir, idx)
+-        BackupPC::XS::Attrib dir;
+-        unsigned int idx;
+-    PREINIT:
+-        bpc_attrib_file *file;
+-    PPCODE:
+-    {
+-        if ( !bpc_attrib_fileIterate(dir, &file, &idx) && file ) {
+-            EXTEND(SP, 2);
+-            PUSHs(sv_2mortal(newRV_noinc((SV*)convert_file2hv(file, file->name))));
+-            PUSHs(sv_2mortal(newSViv(idx)));
+-        }
+-    }
+-
+ char*
+ errStr(void)
+     CODE:
+@@ -981,22 +962,6 @@ getFullMangledPath(ac, dirName)
+     OUTPUT:
+         RETVAL
+ 
+-MODULE = BackupPC::XS		PACKAGE = BackupPC::XS::FileDigest
+-
+-void
+-digest(fileName, compress)
+-        char *fileName;
+-        int compress;
+-    PREINIT:
+-    PPCODE:
+-    {
+-        bpc_digest digest;
+-        if ( bpc_fileDigest(fileName, compress, &digest) == 0 ) {
+-            EXTEND(SP, 1);
+-            PUSHs(sv_2mortal(newSVpvn((char*)digest.digest, digest.len)));
+-        }
+-    }
+-
+ MODULE = BackupPC::XS		PACKAGE = BackupPC::XS::DirOps
+ 
+ int
+--- libbackuppc-xs-perl-0.62.orig/Changes
++++ libbackuppc-xs-perl-0.62/Changes
+@@ -1,35 +1,5 @@
+ Revision history for Perl extension BackupPC-XS.
+ 
+-0.62: June 20, 2020
+-
+-   - force rewrite of attr file if xattr key fixup was applied
+-
+-   - fixed attrib refCnt when attrib is unchanged
+-
+-   - bpc_attrib_dirWrite() doesn't create empty attrib files
+-
+-0.61: June 8, 2020
+-
+-   - fix view of migrated v3 backup
+-
+-   - convert_hv2file() ensures xattr type is hash, and uses correct keyLen+1
+-
+-   - added BackupPC::XS::FileDigest::digest and bpc_fileDigest()
+-
+-0.60: May 30, 2020
+-
+-   - allow mtime to be signed in attrib files
+-
+-   - added bpc_attrib_fileIterate() and BackupPC::XS::Attrib::iterate()
+-
+-   - added checks that xattr key is 0x0 terminated
+-
+-   - increased some buffer sizes to avoid benign compiler warnings for snprintf()
+-
+-   - bpc_attribCache_loadPath() removes any extraneous BPC_FTYPE_DELETED file types
+-
+-   - bpc_attrib_buf2fileFull() calls bpc_attrib_xattrDeleteAll(file)
+-
+ 0.59: Apr 7, 2019
+ 
+    - fix to use correct int format when reading v3 attrib files, reported and fixed
+--- libbackuppc-xs-perl-0.62.orig/MANIFEST
++++ libbackuppc-xs-perl-0.62/MANIFEST
+@@ -9,7 +9,6 @@ backuppc.h
+ bpc_attrib.c
+ bpc_attribCache.c
+ bpc_dirOps.c
+-bpc_fileDigest.c
+ bpc_fileZIO.c
+ bpc_hashtable.c
+ bpc_lib.c
+--- libbackuppc-xs-perl-0.62.orig/META.json
++++ libbackuppc-xs-perl-0.62/META.json
+@@ -4,13 +4,13 @@
+       "unknown"
+    ],
+    "dynamic_config" : 1,
+-   "generated_by" : "ExtUtils::MakeMaker version 7.44, CPAN::Meta::Converter version 2.150010",
++   "generated_by" : "ExtUtils::MakeMaker version 7.0401, CPAN::Meta::Converter version 2.150001",
+    "license" : [
+       "unknown"
+    ],
+    "meta-spec" : {
+       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+-      "version" : 2
++      "version" : "2"
+    },
+    "name" : "BackupPC-XS",
+    "no_index" : {
+@@ -35,6 +35,5 @@
+       }
+    },
+    "release_status" : "stable",
+-   "version" : "0.62",
+-   "x_serialization_backend" : "JSON::PP version 4.04"
++   "version" : "0.62"
+ }
+--- libbackuppc-xs-perl-0.62.orig/META.yml
++++ libbackuppc-xs-perl-0.62/META.yml
+@@ -7,7 +7,7 @@ build_requires:
+ configure_requires:
+   ExtUtils::MakeMaker: '0'
+ dynamic_config: 1
+-generated_by: 'ExtUtils::MakeMaker version 7.44, CPAN::Meta::Converter version 2.150010'
++generated_by: 'ExtUtils::MakeMaker version 7.0401, CPAN::Meta::Converter version 2.150001'
+ license: unknown
+ meta-spec:
+   url: http://module-build.sourceforge.net/META-spec-v1.4.html
+@@ -19,4 +19,3 @@ no_index:
+     - inc
+ requires: {}
+ version: '0.62'
+-x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+--- libbackuppc-xs-perl-0.62.orig/Makefile.PL
++++ libbackuppc-xs-perl-0.62/Makefile.PL
+@@ -7,7 +7,6 @@ my $object = q[
+             bpc_attrib$(OBJ_EXT)
+             bpc_attribCache$(OBJ_EXT)
+             bpc_dirOps$(OBJ_EXT)
+-            bpc_fileDigest$(OBJ_EXT)
+             bpc_fileZIO$(OBJ_EXT)
+             bpc_hashtable$(OBJ_EXT)
+             bpc_lib$(OBJ_EXT)
+--- libbackuppc-xs-perl-0.62.orig/README
++++ libbackuppc-xs-perl-0.62/README
+@@ -1,4 +1,4 @@
+-BackupPC-XS version 0.62
++BackupPC-XS version 0.59
+ ========================
+ 
+ BackupPC::XS implements various BackupPC functions in a perl-callable
+@@ -15,7 +15,7 @@ To install this module type the followin
+ 
+ COPYRIGHT AND LICENCE
+ 
+-BackupPC code is copyright (C) 2013-2020 Craig Barratt
++BackupPC code is copyright (C) 2013-2019 Craig Barratt
+ <cbarratt@users.sourceforge.net>.
+ 
+ bpc_hashTable.c is based on code from rsync.  Rsync is Copyright
+--- libbackuppc-xs-perl-0.62.orig/backuppc.h
++++ libbackuppc-xs-perl-0.62/backuppc.h
+@@ -251,11 +251,6 @@ void bpc_logMsgErrorCntGet(unsigned long
+ void bpc_logMsgCBSet(void (*cb)(int errFlag, char *mesg, size_t mesgLen));
+ 
+ /*
+- * Compute file digest
+- */
+-int bpc_fileDigest(char *fileName, int compress, bpc_digest *digest);
+-
+-/*
+  * Directory operations
+  */
+ int bpc_path_create(char *path);
+@@ -289,8 +284,8 @@ typedef struct {
+      */
+     ushort isTemp;
+     uint32 mode;
+-    uid_t uid;
+-    gid_t gid;
++    uint32 uid;
++    uint32 gid;
+     uint32 nlinks;
+     time_t mtime;
+     OFF_T size;
+@@ -309,7 +304,6 @@ typedef struct {
+ typedef struct {
+     bpc_digest digest;
+     ushort compress;
+-    ushort needRewrite;
+     /*
+      * hash table of bpc_attrib_file entries, indexed by file name
+      */
+@@ -326,7 +320,6 @@ size_t bpc_attrib_xattrList(bpc_attrib_f
+ void bpc_attrib_fileInit(bpc_attrib_file *file, char *fileName, int xattrNumEntries);
+ void bpc_attrib_fileDestroy(bpc_attrib_file *file);
+ bpc_attrib_file *bpc_attrib_fileGet(bpc_attrib_dir *dir, char *fileName, int allocate_if_missing);
+-int bpc_attrib_fileIterate(bpc_attrib_dir *dir, bpc_attrib_file **file, uint *idx);
+ void bpc_attrib_fileCopyOpt(bpc_attrib_file *fileDest, bpc_attrib_file *fileSrc, int overwriteEmptyDigest);
+ void bpc_attrib_fileCopy(bpc_attrib_file *fileDest, bpc_attrib_file *fileSrc);
+ int bpc_attrib_fileCompare(bpc_attrib_file *file0, bpc_attrib_file *file1);
+@@ -335,13 +328,12 @@ int bpc_attrib_fileCount(bpc_attrib_dir
+ char *bpc_attrib_fileType2Text(int type);
+ void bpc_attrib_dirInit(bpc_attrib_dir *dir, int compressLevel);
+ void bpc_attrib_dirDestroy(bpc_attrib_dir *dir);
+-int bpc_attrib_dirNeedRewrite(bpc_attrib_dir *dir);
+ ssize_t bpc_attrib_getEntries(bpc_attrib_dir *dir, char *entries, ssize_t entrySize);
+ void bpc_attrib_dirRefCount(bpc_deltaCount_info *deltaInfo, bpc_attrib_dir *dir, int incr);
+ void bpc_attrib_dirRefCountInodeMax(bpc_deltaCount_info *deltaInfo, bpc_attrib_dir *dir, int incr, unsigned int *inodeMax);
+ void bpc_attrib_attribFilePath(char *path, char *dir, char *attribFileName);
+ bpc_digest *bpc_attrib_dirDigestGet(bpc_attrib_dir *dir);
+-uchar *bpc_attrib_buf2file(bpc_attrib_file *file, uchar *buf, uchar *bufEnd, int xattrNumEntries, int *xattrFixup);
++uchar *bpc_attrib_buf2file(bpc_attrib_file *file, uchar *buf, uchar *bufEnd, int xattrNumEntries);
+ uchar *bpc_attrib_buf2fileFull(bpc_attrib_file *file, uchar *buf, uchar *bufEnd);
+ uchar *bpc_attrib_file2buf(bpc_attrib_file *file, uchar *buf, uchar *bufEnd);
+ int bpc_attrib_digestRead(bpc_attrib_dir *dir, bpc_digest *digest, char *attribPath);
+--- libbackuppc-xs-perl-0.62.orig/bpc_attrib.c
++++ libbackuppc-xs-perl-0.62/bpc_attrib.c
+@@ -63,7 +63,7 @@ void bpc_attrib_backwardCompat(int write
+ {
+     if ( writeOldStyleAttribFile >= 0 ) WriteOldStyleAttribFile = writeOldStyleAttribFile;
+     if ( keepOldAttribFiles >= 0 )      KeepOldAttribFiles = keepOldAttribFiles;
+-    if ( BPC_LogLevel >= 5 ) {
++    if ( BPC_LogLevel >= 2 ) {
+         bpc_logMsgf("bpc_attrib_backwardCompat: WriteOldStyleAttribFile = %d, KeepOldAttribFiles = %d\n",
+                      WriteOldStyleAttribFile, KeepOldAttribFiles);
+     }
+@@ -121,23 +121,7 @@ int bpc_attrib_xattrDeleteAll(bpc_attrib
+  */
+ int bpc_attrib_xattrSetValue(bpc_attrib_file *file, void *key, int keyLen, void *value, uint32 valueLen)
+ {
+-    bpc_attrib_xattr *xattr;
+-    char keyCopy[BPC_MAXPATHLEN];
+-
+-    if ( ((char*)key)[keyLen - 1] != 0x0 ) {
+-        if ( keyLen >= BPC_MAXPATHLEN - 8 ) {
+-            bpc_logMsgf("bpc_attrib_xattrSetValue: BOTCH: key not 0x0 terminated; too long to repair (keyLen %u)\n", keyLen);
+-            return -1;
+-        } else {
+-            memcpy(keyCopy, key, keyLen);
+-            keyCopy[keyLen++] = 0x0;
+-            key = keyCopy;
+-            if ( BPC_LogLevel >= 6 ) {
+-                bpc_logMsgf("bpc_attrib_xattrSetValue: fixup: appended 0x0 to xattr name '%s' (keyLen now %u)\n", (char*)key, keyLen);
+-            }
+-        }
+-    }
+-    xattr = bpc_attrib_xattrGet(file, key, keyLen, 1);
++    bpc_attrib_xattr *xattr = bpc_attrib_xattrGet(file, key, keyLen, 1);
+ 
+     if ( !xattr->value ) {
+         /*
+@@ -239,14 +223,9 @@ static void bpc_attrib_xattrListKey(bpc_
+             return;
+         }
+         /*
+-         * confirm that keyLen includes the \0 terminating byte
++         * keyLen already includes the \0 terminating byte
+          */
+         memcpy(info->list + info->idx, xattr->key.key, xattr->key.keyLen);
+-        if ( xattr->key.keyLen >= 1 && info->list[info->idx + xattr->key.keyLen - 1] != 0x0 ) {
+-            info->list[info->idx + xattr->key.keyLen - 1] = 0x0;
+-            bpc_logMsgf("bpc_attrib_xattrListKey: BOTCH: truncated xattr name '%s' to match keyLen %u\n", info->list + info->idx, xattr->key.keyLen);
+-        }
+-        if ( BPC_LogLevel >= 6 ) bpc_logMsgf("bpc_attrib_xattrListKey: adding %s\n", info->list + info->idx);
+         info->idx += xattr->key.keyLen;
+     } else {
+         info->idx += xattr->key.keyLen;
+@@ -390,13 +369,6 @@ void bpc_attrib_fileDeleteName(bpc_attri
+     bpc_hashtable_nodeDelete(&dir->filesHT, file);
+ }
+ 
+-int bpc_attrib_fileIterate(bpc_attrib_dir *dir, bpc_attrib_file **file, uint *idx)
+-{
+-    *file = bpc_hashtable_nextEntry(&dir->filesHT, idx);
+-    if ( !*file ) return -1;
+-    return 0;
+-}
+-
+ int bpc_attrib_fileCount(bpc_attrib_dir *dir)
+ {
+     return bpc_hashtable_entryCount(&dir->filesHT);
+@@ -412,7 +384,6 @@ void bpc_attrib_dirInit(bpc_attrib_dir *
+ {
+     dir->digest.len = 0;
+     dir->compress = compressLevel;
+-    dir->needRewrite = 0;
+     bpc_hashtable_create(&dir->filesHT, 512, sizeof(bpc_attrib_file));
+ }
+ 
+@@ -422,11 +393,6 @@ void bpc_attrib_dirDestroy(bpc_attrib_di
+     bpc_hashtable_destroy(&dir->filesHT);
+ }
+ 
+-int bpc_attrib_dirNeedRewrite(bpc_attrib_dir *dir)
+-{
+-    return dir->needRewrite;
+-}
+-
+ typedef struct {
+     bpc_deltaCount_info *deltaInfo;
+     int incr;
+@@ -600,19 +566,21 @@ static int64 getVarInt_v3(uchar **bufPP,
+ static void setVarInt(uchar **bufPP, uchar *bufEnd, int64 value)
+ {
+     uchar *bufP = *bufPP;
+-    int maxBytes = (sizeof(value) * 8 + 6) / 7;
+ 
++    if ( value < 0 ) {
++        bpc_logErrf("setVarInt botch: got negative argument %ld; setting to 0\n", (long int)value);
++        value = 0;
++    }
+     do {
+         uchar c = value & 0x7f;
+         value >>= 7;
+-        maxBytes--;
+-        if ( value && maxBytes > 0 ) c |= 0x80;
++        if ( value ) c |= 0x80;
+         if ( bufP < bufEnd ) {
+             *bufP++ = c;
+         } else {
+             bufP++;
+         }
+-    } while ( value && maxBytes > 0 );
++    } while ( value );
+     *bufPP = bufP;
+ }
+ 
+@@ -623,7 +591,7 @@ static void setVarInt(uchar **bufPP, uch
+  * If there isn't enough data to extract a complete file structure, the return value
+  * will be greater than bufEnd.  You should gather more data and re-call the function.
+  */
+-uchar *bpc_attrib_buf2file(bpc_attrib_file *file, uchar *buf, uchar *bufEnd, int xattrNumEntries, int *xattrFixup)
++uchar *bpc_attrib_buf2file(bpc_attrib_file *file, uchar *buf, uchar *bufEnd, int xattrNumEntries)
+ {
+     uchar *bufP   = buf;
+     int i;
+@@ -650,9 +618,6 @@ uchar *bpc_attrib_buf2file(bpc_attrib_fi
+         uint valueLen = getVarInt(&bufP, bufEnd);
+ 
+         if ( bufP + keyLen + valueLen <= bufEnd ) {
+-            if ( xattrFixup && bufP[keyLen - 1] != 0x0 ) {
+-                *xattrFixup = 1;
+-            }
+             bpc_attrib_xattrSetValue(file, bufP, keyLen, bufP + keyLen, valueLen);
+         }
+         bufP += keyLen + valueLen;
+@@ -679,10 +644,8 @@ uchar *bpc_attrib_buf2fileFull(bpc_attri
+         return NULL;
+     }
+     bufP += fileNameLen;
+-    bpc_attrib_xattrDeleteAll(file);
+     xattrNumEntries = getVarInt(&bufP, bufEnd);
+-    if ( BPC_LogLevel >= 6 ) bpc_logMsgf("bpc_attrib_buf2fileFull: xattrNumEntries = %d\n", xattrNumEntries);
+-    bufP = bpc_attrib_buf2file(file, bufP, bufEnd, xattrNumEntries, NULL);
++    bufP = bpc_attrib_buf2file(file, bufP, bufEnd, xattrNumEntries);
+     return bufP;
+ }
+ 
+@@ -886,7 +849,6 @@ int bpc_attrib_dirRead(bpc_attrib_dir *d
+             char *fileName;
+             bpc_attrib_file *file;
+             uchar *bufPsave = bufP;
+-            int xattrFixup = 0;
+ 
+             if ( nRead == sizeof(buf) && bufP > buf + nRead - 2 * BPC_MAXPATHLEN
+                     && read_more_data(&fd, buf, sizeof(buf), &nRead, &bufP, attribPath) ) {
+@@ -915,8 +877,7 @@ int bpc_attrib_dirRead(bpc_attrib_dir *d
+             bpc_attrib_fileInit(file, fileName, xattrNumEntries);
+             file->backupNum = backupNum;
+ 
+-            bufP = bpc_attrib_buf2file(file, bufP, buf + nRead, xattrNumEntries, &xattrFixup);
+-            dir->needRewrite |= xattrFixup;
++            bufP = bpc_attrib_buf2file(file, bufP, buf + nRead, xattrNumEntries);
+             if ( bufP > buf + nRead ) {
+                 /*
+                  * Need to get more data and try again.  We have allocated file->name,
+@@ -1000,7 +961,6 @@ int bpc_attrib_dirRead(bpc_attrib_dir *d
+ typedef struct {
+     uchar *bufP;
+     uchar *bufEnd;
+-    uint numEntries;
+ } buf_info;
+ 
+ typedef struct {
+@@ -1023,12 +983,8 @@ static void bpc_attrib_xattrWrite(bpc_at
+     setVarInt(&info->bufP, info->bufEnd, xattr->key.keyLen);
+     setVarInt(&info->bufP, info->bufEnd, xattr->valueLen);
+ 
+-    if ( xattr->key.keyLen >= 1 && info->bufP + xattr->key.keyLen <= info->bufEnd ) {
++    if ( info->bufP + xattr->key.keyLen <= info->bufEnd ) {
+         memcpy(info->bufP, xattr->key.key, xattr->key.keyLen);
+-        if ( info->bufP[xattr->key.keyLen - 1] != 0x0 ) {
+-            info->bufP[xattr->key.keyLen - 1] = 0x0;
+-            bpc_logMsgf("bpc_attrib_xattrWrite: BOTCH: truncated xattr name '%s' to match keyLen %u\n", info->bufP, xattr->key.keyLen);
+-        }
+     }
+     info->bufP += xattr->key.keyLen;
+ 
+@@ -1036,7 +992,6 @@ static void bpc_attrib_xattrWrite(bpc_at
+         memcpy(info->bufP, xattr->value, xattr->valueLen);
+     }
+     info->bufP += xattr->valueLen;
+-    info->numEntries++;
+ }
+ 
+ /*
+@@ -1076,13 +1031,10 @@ uchar *bpc_attrib_file2buf(bpc_attrib_fi
+     }
+     bufP += file->digest.len;
+ 
+-    info.bufEnd     = bufEnd;
+-    info.bufP       = bufP;
+-    info.numEntries = 0;
++    info.bufEnd = bufEnd;
++    info.bufP   = bufP;
+     bpc_hashtable_iterate(&file->xattrHT, (void*)bpc_attrib_xattrWrite, &info);
+-    if ( info.numEntries != xattrEntryCnt ) {
+-        bpc_logErrf("bpc_attrib_file2buf: BOTCH: wrote %u xattr entries vs %u; attrib file corrupted\n", info.numEntries, xattrEntryCnt);
+-    }
++
+     return info.bufP;
+ }
+ 
+@@ -1228,7 +1180,6 @@ int bpc_attrib_dirWrite(bpc_deltaCount_i
+     char *p;
+     int fdNum;
+     size_t attribPathLen, baseAttribFileNameLen;
+-    int digestChanged;
+ 
+     if ( WriteOldStyleAttribFile ) return bpc_attrib_dirWriteOld(deltaInfo, dir, dirPath, attribFileName, oldDigest);
+ 
+@@ -1281,39 +1232,34 @@ int bpc_attrib_dirWrite(bpc_deltaCount_i
+         }
+         attribPath[attribPathLen++] = '_';
+         bpc_digest_digest2str(&digest, attribPath + attribPathLen);
+-        /*
+-         * Now create an empty attrib file with the file name digest
+-         */
+-        if ( (fdNum = open(attribPathTemp, O_WRONLY | O_CREAT | O_TRUNC, 0660)) < 0 ) {
+-            bpc_logErrf("bpc_attrib_dirWrite: can't open/create raw %s for writing\n", attribPathTemp);
+-            return -1;
+-        }
+-        close(fdNum);
+-        if ( rename(attribPathTemp, attribPath) ) {
+-            bpc_logErrf("bpc_attrib_dirWrite: rename from %s to %s failed\n", attribPathTemp, attribPath);
+-            return -1;
+-        }
+-        if ( BPC_LogLevel >= 5 ) bpc_logMsgf("bpc_attrib_dirWrite: created new attrib file %s\n", attribPath);
+     } else {
+-        memset(&digest, 0, sizeof(digest));
++        digest.len = 0;
+         attribPath[attribPathLen++] = '_';
+         strcpy(attribPath + attribPathLen, "0");
+-        if ( BPC_LogLevel >= 5 ) bpc_logMsgf("bpc_attrib_dirWrite: skipping creating new empty attrib file %s\n", attribPath);
+-        unlink(attribPath);
+     }
+     
++    /*
++     * Now create an empty attrib file
++     */
++    if ( (fdNum = open(attribPathTemp, O_WRONLY | O_CREAT | O_TRUNC, 0660)) < 0 ) {
++        bpc_logErrf("bpc_attrib_dirWrite: can't open/create raw %s for writing\n", attribPathTemp);
++        return -1;
++    }
++    close(fdNum);
++    if ( rename(attribPathTemp, attribPath) ) {
++        bpc_logErrf("bpc_attrib_dirWrite: rename from %s to %s failed\n", attribPathTemp, attribPath);
++        return -1;
++    }
++    if ( BPC_LogLevel >= 5 ) bpc_logMsgf("bpc_attrib_dirWrite: created new attrib file %s\n", attribPath);
++
+     if ( BPC_LogLevel >= 8 ) bpc_logMsgf("bpc_attrib_dirWrite: new attrib digest = 0x%02x%02x%02x..., oldDigest = 0x%02x%02x...\n",
+                 digest.digest[0], digest.digest[1], digest.digest[2],
+                 oldDigest ? oldDigest->digest[0] : 0x0, oldDigest ? oldDigest->digest[1] : 0x0);
+-
+-    digestChanged = !oldDigest || bpc_digest_compare(&digest, oldDigest);
+-    if ( digestChanged && digest.len > 0 ) {
+-        bpc_poolRefDeltaUpdate(deltaInfo, dir->compress, &digest, 1);
+-    }
++    bpc_poolRefDeltaUpdate(deltaInfo, dir->compress, &digest, 1);
+ 
+     if ( oldDigest ) {
+-        if ( !digestChanged ) {
+-            if ( BPC_LogLevel >= 4 ) bpc_logMsgf("bpc_attrib_dirWrite: old attrib has same digest; no changes to ref counts\n");
++        if ( !bpc_digest_compare(&digest, oldDigest) ) {
++            if ( BPC_LogLevel >= 2 ) bpc_logMsgf("bpc_attrib_dirWrite: old attrib has same digest; no changes to ref counts\n");
+             return 0;
+         }
+         if ( attribPathLen + oldDigest->len * 2 + 2 >= sizeof(attribPath) ) {
+--- libbackuppc-xs-perl-0.62.orig/bpc_attribCache.c
++++ libbackuppc-xs-perl-0.62/bpc_attribCache.c
+@@ -37,8 +37,8 @@ void bpc_attribCache_init(bpc_attribCach
+     ac->shareNameUM[BPC_MAXPATHLEN - 1] = '\0';
+     bpc_fileNameEltMangle(ac->shareName, BPC_MAXPATHLEN, ac->shareNameUM);
+     ac->shareNameLen = strlen(ac->shareName);
+-    snprintf(ac->hostDir, BPC_MAXPATHLEN, "%s/pc/%s", BPC_TopDir, hostName);
+-    snprintf(ac->backupTopDir, BPC_MAXPATHLEN, "%s/pc/%s/%d", BPC_TopDir, hostName, ac->backupNum);
++    snprintf(ac->hostDir, BPC_MAXPATHLEN, "%s/pc/%s", BPC_TopDir, ac->hostName);
++    snprintf(ac->backupTopDir, BPC_MAXPATHLEN, "%s/pc/%s/%d", BPC_TopDir, ac->hostName, ac->backupNum);
+     bpc_path_create(ac->backupTopDir);
+ 
+     bpc_hashtable_create(&ac->attrHT,  BPC_ATTRIBCACHE_DIR_HT_SIZE, sizeof(bpc_attribCache_dir));
+@@ -99,7 +99,7 @@ void bpc_attribCache_setCurrentDirectory
+ static void splitPath(bpc_attribCache_info *ac, char *dir, char *fileName, char *attribPath, char *path)
+ {
+     char *dirOrig = dir;
+-    char fullPath[2*BPC_MAXPATHLEN];
++    char fullPath[BPC_MAXPATHLEN];
+     size_t pathLen;
+ 
+     /*
+@@ -114,7 +114,7 @@ static void splitPath(bpc_attribCache_in
+      * if this is a relative path, prepend ac->currentDir (provided ac->currentDir is set)
+      */
+     if ( path[0] != '/' && ac->currentDir[0] ) {
+-        snprintf(fullPath, sizeof(fullPath), "%s/%s", ac->currentDir, path);
++        snprintf(fullPath, BPC_MAXPATHLEN, "%s/%s", ac->currentDir, path);
+         path = fullPath;
+     }
+ 
+@@ -176,15 +176,6 @@ static void inodePath(UNUSED(bpc_attribC
+     *indexStr = '\0';
+ }
+ 
+-static void bpc_attribCache_removeDeletedEntries(bpc_attrib_file *file, void *arg)
+-{
+-    bpc_attribCache_dir *attr = (bpc_attribCache_dir*)arg;
+-    if ( file->type != BPC_FTYPE_DELETED ) return;
+-    attr->dirty = 1;
+-    bpc_attrib_fileDestroy(file);
+-    bpc_hashtable_nodeDelete(&attr->dir.filesHT, file);
+-}
+-
+ static bpc_attribCache_dir *bpc_attribCache_loadPath(bpc_attribCache_info *ac, char *fileName, char *path)
+ {
+     char dir[BPC_MAXPATHLEN], attribPath[BPC_MAXPATHLEN];
+@@ -218,7 +209,7 @@ static bpc_attribCache_dir *bpc_attribCa
+ 
+     if ( ac->bkupMergeCnt > 0 ) {
+         int i;
+-        char topDir[2*BPC_MAXPATHLEN], fullAttribPath[2*BPC_MAXPATHLEN];
++        char topDir[BPC_MAXPATHLEN], fullAttribPath[BPC_MAXPATHLEN];
+ 
+         /*
+          * Merge multiple attrib files to create the "view" for this backup.
+@@ -228,61 +219,58 @@ static bpc_attribCache_dir *bpc_attribCa
+         for ( i = 0 ; i < ac->bkupMergeCnt ; i++ ) {
+             bpc_attrib_dir dir;
+             ssize_t entrySize;
+-            char *entries, *entry;
++            char *entries, *fileName;
++            int attribFileExists, attribDirExists = 1;
++            STRUCT_STAT st;
+ 
+             snprintf(topDir, sizeof(topDir), "%s/pc/%s/%d", BPC_TopDir, ac->hostName, ac->bkupMergeList[i].num);
+             snprintf(fullAttribPath, sizeof(fullAttribPath), "%s/%s", topDir, attribPath);
+ 
++            attribFileExists = !stat(fullAttribPath, &st) && S_ISREG(st.st_mode);
++
++            if ( !attribFileExists ) {
++                char *p;
++                if ( (p = strrchr(fullAttribPath, '/')) ) {
++                    *p = '\0';
++                    attribDirExists = !stat(fullAttribPath, &st) && S_ISDIR(st.st_mode);
++                }
++            }
++            if ( BPC_LogLevel >= 9 ) bpc_logMsgf("bpc_attribCache_loadPath: path = %s, file exists = %d, dir exists = %d\n", fullAttribPath, attribFileExists, attribDirExists);
++
++            if ( ac->bkupMergeList[i].version < 4 && i == ac->bkupMergeCnt - 1 && !attribFileExists && !attribDirExists ) {
++                /*
++                 * For V3, if the last backup doesn't have a directory, then the merged view is empty
++                 */
++                bpc_attrib_dirDestroy(&attr->dir);
++                bpc_attrib_dirInit(&attr->dir, ac->compress);
++                break;
++            }
++            if ( (ac->bkupMergeList[i].version < 4 && !attribFileExists) || !attribDirExists ) {
++                /*
++                 * nothing to update here - keep going
++                 */
++                continue;
++            }
+             bpc_attrib_dirInit(&dir, ac->bkupMergeList[i].compress);
+             if ( (status = bpc_attrib_dirRead(&dir, topDir, attribPath, ac->bkupMergeList[i].num)) ) {
+-                if ( ac->bkupMergeList[i].version < 4 ) {
+-                    char *p;
+-                    int attribDirExists = 1;
+-                    STRUCT_STAT st;
+-
+-                    if ( (p = strrchr(fullAttribPath, '/')) ) {
+-                        *p = '\0';
+-                        attribDirExists = !stat(fullAttribPath, &st) && S_ISDIR(st.st_mode);
+-                        *p = '/';
+-                    }
+-                    if ( i == ac->bkupMergeCnt - 1 && !attribDirExists ) {
+-                        /*
+-                         * For V3, if the last backup doesn't have a directory, then the merged view is empty
+-                         */
+-                        bpc_attrib_dirDestroy(&dir);
+-                        bpc_attrib_dirDestroy(&attr->dir);
+-                        bpc_attrib_dirInit(&attr->dir, ac->compress);
+-                        break;
+-                    }
+-                    if ( !attribDirExists ) {
+-                        /*
+-                         * nothing to update here - keep going
+-                         */
+-                        bpc_attrib_dirDestroy(&dir);
+-                        continue;
+-                    }
+-                }
+                 bpc_logErrf("bpc_attribCache_loadPath: bpc_attrib_dirRead(%s/%s) returned %d\n", topDir, attribPath, status);
+             }
+-            if ( bpc_attrib_dirNeedRewrite(&dir) ) {
+-                attr->dirty = 1;
+-            }
+             entrySize = bpc_attrib_getEntries(&dir, NULL, 0);
+-            if ( (entries = malloc(entrySize + 1)) && bpc_attrib_getEntries(&dir, entries, entrySize) == entrySize ) {
+-                for ( entry = entries ; entry < entries + entrySize ; entry += strlen(entry) + 1 ) {
+-                    bpc_attrib_file *file = bpc_attrib_fileGet(&dir, entry, 0);
++            if ( (entries = malloc(entrySize)) && bpc_attrib_getEntries(&dir, entries, entrySize) == entrySize ) {
++                for ( fileName = entries ; fileName < entries + entrySize ; fileName += strlen(fileName) + 1 ) {
++                    bpc_attrib_file *file = bpc_attrib_fileGet(&dir, fileName, 0);
+                     if ( !file ) continue;
+                     if ( file->type == BPC_FTYPE_DELETED ) {
+-                        bpc_attrib_fileDeleteName(&attr->dir, entry);
++                        bpc_attrib_fileDeleteName(&attr->dir, fileName);
+                     } else {
+                         bpc_attrib_file *fileDest;
+ 
+-                        if ( !(fileDest = bpc_attrib_fileGet(&attr->dir, entry, 1)) ) return NULL;
+-                        if ( fileDest->key.key == entry ) {
++                        if ( !(fileDest = bpc_attrib_fileGet(&attr->dir, fileName, 1)) ) return NULL;
++                        if ( fileDest->key.key == fileName ) {
+                             /*
+                              * new entry - initialize
+                              */
+-                            bpc_attrib_fileInit(fileDest, entry, 0);
++                            bpc_attrib_fileInit(fileDest, fileName, 0);
+                         }
+                         bpc_attrib_fileCopy(fileDest, file);
+                         fileDest->backupNum = ac->bkupMergeList[i].num;
+@@ -305,16 +293,6 @@ static bpc_attribCache_dir *bpc_attribCa
+         if ( (status = bpc_attrib_dirRead(&attr->dir, ac->backupTopDir, attribPath, ac->backupNum)) ) {
+             bpc_logErrf("bpc_attribCache_loadPath: bpc_attrib_dirRead(%s, %s) returned %d\n", ac->backupTopDir, attribPath, status);
+         }
+-        if ( bpc_attrib_dirNeedRewrite(&attr->dir) ) {
+-            attr->dirty = 1;
+-        }
+-        /*
+-         * remove any extraneous BPC_FTYPE_DELETED file types
+-         */
+-	bpc_hashtable_iterate(&attr->dir.filesHT, (void*)bpc_attribCache_removeDeletedEntries, attr);
+-    }
+-    if ( attr->dirty ) {
+-        if ( BPC_LogLevel >= 8 ) bpc_logMsgf("bpc_attribCache_loadPath: will rewrite path = %s -> dir = %s, fileName = %s, attribPath = %s\n", path, dir, fileName, attribPath);
+     }
+     if ( bpc_hashtable_entryCount(&ac->attrHT) > BPC_ATTRIBCACHE_DIR_COUNT_MAX ) {
+         bpc_attribCache_flush(ac, 0, NULL);
+@@ -352,7 +330,7 @@ static bpc_attribCache_dir *bpc_attribCa
+     attr->lruCnt = ac->cacheLruCnt++;
+     if ( ac->bkupMergeCnt > 0 ) {
+         int i;
+-        char inodeDir[2*BPC_MAXPATHLEN], fullAttribPath[2*BPC_MAXPATHLEN];
++        char inodeDir[BPC_MAXPATHLEN], fullAttribPath[BPC_MAXPATHLEN];
+ 
+         /*
+          * Merge multiple attrib files to create the "view" for this backup.
+@@ -361,43 +339,45 @@ static bpc_attribCache_dir *bpc_attribCa
+         for ( i = 0 ; i < ac->bkupMergeCnt ; i++ ) {
+             bpc_attrib_dir dir;
+             ssize_t entrySize;
+-            char *entries, *entry;
++            char *entries, *fileName;
++            int attribFileExists, attribDirExists = 1;
++            STRUCT_STAT st;
+ 
+             snprintf(inodeDir, sizeof(inodeDir), "%s/pc/%s/%d/%s", BPC_TopDir, ac->hostName, ac->bkupMergeList[i].num, attribDir);
+             snprintf(fullAttribPath, sizeof(fullAttribPath), "%s/%s", inodeDir, attribFile);
+ 
++            attribFileExists = !stat(fullAttribPath, &st) && S_ISREG(st.st_mode);
++            if ( !attribFileExists ) {
++                attribDirExists = !stat(inodeDir, &st) && S_ISDIR(st.st_mode);
++            }
++            if ( BPC_LogLevel >= 9 ) bpc_logMsgf("bpc_attribCache_loadInode: path = %s, file exists = %d, dir exists = %d\n", fullAttribPath, attribFileExists, attribDirExists);
++
++            if ( (ac->bkupMergeList[i].version < 4 && !attribFileExists) || !attribDirExists ) {
++                /*
++                 * nothing to update here - keep going
++                 */
++                continue;
++            }
+             bpc_attrib_dirInit(&dir, ac->bkupMergeList[i].compress);
+             if ( (status = bpc_attrib_dirRead(&dir, inodeDir, attribFile, ac->bkupMergeList[i].num)) ) {
+-                STRUCT_STAT st;
+-                int attribDirExists = !stat(inodeDir, &st) && S_ISDIR(st.st_mode);
+-                if ( ac->bkupMergeList[i].version < 4 || !attribDirExists ) {
+-                     /*
+-                      * nothing to update here - keep going
+-                      */
+-                     bpc_attrib_dirDestroy(&dir);
+-                     continue;
+-                }
+                 bpc_logErrf("bpc_attribCache_loadInode: bpc_attrib_dirRead(%s/%s) returned %d\n", inodeDir, attribFile, status);
+             }
+-            if ( bpc_attrib_dirNeedRewrite(&dir) ) {
+-                attr->dirty = 1;
+-            }
+             entrySize = bpc_attrib_getEntries(&dir, NULL, 0);
+-            if ( (entries = malloc(entrySize + 1)) && bpc_attrib_getEntries(&dir, entries, entrySize) == entrySize ) {
+-                for ( entry = entries ; entry < entries + entrySize ; entry += strlen(entry) + 1 ) {
+-                    bpc_attrib_file *file = bpc_attrib_fileGet(&dir, entry, 0);
++            if ( (entries = malloc(entrySize)) && bpc_attrib_getEntries(&dir, entries, entrySize) == entrySize ) {
++                for ( fileName = entries ; fileName < entries + entrySize ; fileName += strlen(fileName) + 1 ) {
++                    bpc_attrib_file *file = bpc_attrib_fileGet(&dir, fileName, 0);
+                     if ( !file ) continue;
+                     if ( file->type == BPC_FTYPE_DELETED ) {
+-                        bpc_attrib_fileDeleteName(&attr->dir, entry);
++                        bpc_attrib_fileDeleteName(&attr->dir, fileName);
+                     } else {
+                         bpc_attrib_file *fileDest;
+ 
+-                        if ( !(fileDest = bpc_attrib_fileGet(&attr->dir, entry, 1)) ) return NULL;
+-                        if ( fileDest->key.key == entry ) {
++                        if ( !(fileDest = bpc_attrib_fileGet(&attr->dir, fileName, 1)) ) return NULL;
++                        if ( fileDest->key.key == fileName ) {
+                             /*
+                              * new entry - initialize
+                              */
+-                            bpc_attrib_fileInit(fileDest, entry, 0);
++                            bpc_attrib_fileInit(fileDest, fileName, 0);
+                         }
+                         bpc_attrib_fileCopy(fileDest, file);
+                     }
+@@ -416,18 +396,12 @@ static bpc_attribCache_dir *bpc_attribCa
+         /*
+          * non-merge case - read the single attrib file
+          */
+-        char inodeDir[2*BPC_MAXPATHLEN];
++        char inodeDir[BPC_MAXPATHLEN];
+         snprintf(inodeDir, sizeof(inodeDir), "%s/%s", ac->backupTopDir, attribDir);
+ 
+         if ( (status = bpc_attrib_dirRead(&attr->dir, inodeDir, attribFile, ac->backupNum)) ) {
+             bpc_logErrf("bpc_attribCache_loadInode: bpc_attrib_dirRead(%s/%s) returned %d\n", inodeDir, attribFile, status);
+         }
+-        if ( bpc_attrib_dirNeedRewrite(&attr->dir) ) {
+-            attr->dirty = 1;
+-        }
+-    }
+-    if ( attr->dirty ) {
+-        if ( BPC_LogLevel >= 8 ) bpc_logMsgf("bpc_attribCache_loadInode: will rewrite path = %s -> dir = %s, fileName = %s\n", attribPath, attribDir, attribFile);
+     }
+     if ( bpc_hashtable_entryCount(&ac->inodeHT) > BPC_ATTRIBCACHE_DIR_COUNT_MAX ) {
+         bpc_attribCache_flush(ac, 0, NULL);
+@@ -614,7 +588,7 @@ static void bpc_attribCache_getDirEntry(
+ ssize_t bpc_attribCache_getDirEntries(bpc_attribCache_info *ac, char *path, char *entries, ssize_t entrySize)
+ {
+     bpc_attribCache_dir *attr;
+-    char fileName[BPC_MAXPATHLEN], fullPath[2*BPC_MAXPATHLEN];
++    char fileName[BPC_MAXPATHLEN], fullPath[BPC_MAXPATHLEN];
+     dirEntry_info info;
+     size_t pathLen = strlen(path);
+     ino_t inode = 0;
+@@ -625,7 +599,7 @@ ssize_t bpc_attribCache_getDirEntries(bp
+     if ( pathLen >= BPC_MAXPATHLEN - 3 ) return -1;
+     if ( pathLen == 1 && path[0] == '.' ) {
+         if ( ac->currentDir[0] ) {
+-            snprintf(fullPath, sizeof(fullPath), "%s/x", ac->currentDir);
++            snprintf(fullPath, BPC_MAXPATHLEN, "%s/x", ac->currentDir);
+         } else {
+             strcpy(fullPath, "/x");
+         }
+--- libbackuppc-xs-perl-0.62.orig/bpc_poolWrite.c
++++ libbackuppc-xs-perl-0.62/bpc_poolWrite.c
+@@ -342,6 +342,8 @@ int bpc_poolWrite_write(bpc_poolWrite_in
+ 
+         info->digestExtZeroLen = -1;
+         while ( 1 ) {
++            char poolPath[BPC_MAXPATHLEN];
++
+             bpc_digest_append_ext(&info->digest, ext);
+             bpc_digest_md52path(poolPath, info->compress, &info->digest);
+             /*
